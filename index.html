@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- 隱私設定 1：拒絕所有搜尋引擎建立索引與追蹤 -->
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="googlebot" content="noindex, nofollow">
+  
+  <title>R&J 路線小幫手 (私密版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { background-color: #0f172a; color: white; font-family: sans-serif; user-select: none; }
+    
+    .role-btn.active { transform: scale(1.05); border: 2px solid white; opacity: 1; font-weight: bold; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+    .role-btn.inactive { opacity: 0.5; filter: grayscale(50%); border: 2px solid transparent; }
+    .inferred-path { color: #94a3b8; font-style: italic; }
+  </style>
+</head>
+<body class="p-3 md:p-6 flex flex-col items-center min-h-screen">
+
+  <!-- ==================== 隱私設定 2：通關密碼畫面 ==================== -->
+  <div id="authView" class="w-full max-w-md flex flex-col items-center justify-center min-h-[60vh] gap-6">
+    <div class="text-center">
+      <h1 class="text-3xl font-bold text-white mb-2">🔒 專屬工具</h1>
+      <p class="text-slate-400 text-sm">請輸入通關密碼以啟用小幫手</p>
+    </div>
+    
+    <div class="bg-slate-800 p-6 rounded-xl shadow-xl w-full max-w-sm border border-slate-700">
+      <input class="shadow appearance-none border border-slate-600 rounded w-full py-3 px-4 bg-slate-700 text-white mb-4 leading-tight focus:outline-none focus:ring-2 focus:ring-emerald-500 text-center text-lg font-bold tracking-widest" id="authInput" type="password" placeholder="輸入密碼">
+      <p id="authErrorMsg" class="text-red-400 text-xs text-center mb-4 hidden">密碼錯誤，請重新輸入</p>
+      <button id="verifyAuthBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg">
+        驗證進入
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== 登入/大廳畫面 ==================== -->
+  <div id="lobbyView" class="w-full max-w-md flex flex-col items-center justify-center min-h-[60vh] gap-6 hidden">
+    <div class="text-center">
+      <h1 class="text-3xl font-bold text-white mb-2">R&J 路線小幫手</h1>
+      <p class="text-slate-400 text-sm">與隊友輸入相同的房號即可同步路線</p>
+    </div>
+    
+    <div class="bg-slate-800 p-6 rounded-xl shadow-xl w-full max-w-sm border border-slate-700">
+      <label class="block text-slate-300 text-sm font-bold mb-2" for="roomInput">
+        房間號碼 / 房名
+      </label>
+      <input class="shadow appearance-none border border-slate-600 rounded w-full py-3 px-4 bg-slate-700 text-white mb-4 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-lg font-bold" id="roomInput" type="text" placeholder="例如: 8888 或 maple123">
+      <button id="joinRoomBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg">
+        進入房間
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== 遊戲主畫面 ==================== -->
+  <div id="gameView" class="w-full max-w-md flex flex-col gap-4 hidden">
+    
+    <div class="flex justify-between items-center bg-slate-800 p-2 rounded-lg border border-slate-700">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400">當前房間:</span>
+        <span id="currentRoomDisplay" class="font-bold text-blue-400">---</span>
+      </div>
+      <div class="flex gap-2">
+        <button id="leaveRoomBtn" class="bg-slate-700 hover:bg-slate-600 text-xs py-1.5 px-3 rounded shadow transition border border-slate-600">
+          登出
+        </button>
+        <button id="resetBtn" class="bg-red-900/50 hover:bg-red-800/80 text-red-300 text-xs py-1.5 px-3 rounded shadow transition border border-red-800">
+          🔄 重置
+        </button>
+      </div>
+    </div>
+
+    <!-- 全隊路線儀表板 -->
+    <div class="bg-slate-800 p-3 rounded-lg shadow-lg">
+      <div class="text-sm text-slate-400 border-b border-slate-700 pb-2 mb-2 font-bold flex justify-between">
+        <span>全隊路線 (1F ➔ 10F)</span>
+        <span class="font-normal text-xs">灰色斜體為自動推算</span>
+      </div>
+      <div class="space-y-1 font-mono text-lg tracking-widest" id="pathDashboard">
+        <div id="path-A" class="text-blue-400">A: <span>??????????</span></div>
+        <div id="path-B" class="text-amber-400">B: <span>??????????</span></div>
+        <div id="path-C" class="text-emerald-400">C: <span>??????????</span></div>
+        <div id="path-D" class="text-purple-400">D: <span>??????????</span></div>
+      </div>
+    </div>
+
+    <!-- 身份切換區塊 -->
+    <div class="bg-slate-800/50 p-3 rounded-lg shadow border border-slate-700/50">
+      <div class="text-sm text-slate-400 mb-2 font-bold">目前標記身份：</div>
+      <div class="grid grid-cols-4 gap-2">
+        <button id="role-A" class="role-btn active bg-blue-500 text-white py-2 rounded shadow transition" onclick="setRole('A')">A</button>
+        <button id="role-B" class="role-btn inactive bg-amber-500 text-white py-2 rounded shadow transition" onclick="setRole('B')">B</button>
+        <button id="role-C" class="role-btn inactive bg-emerald-500 text-white py-2 rounded shadow transition" onclick="setRole('C')">C</button>
+        <button id="role-D" class="role-btn inactive bg-purple-500 text-white py-2 rounded shadow transition" onclick="setRole('D')">D</button>
+      </div>
+    </div>
+
+    <!-- 樓層標題列 -->
+    <div class="flex text-center text-sm font-bold text-slate-400 mt-2">
+      <div class="w-12">樓層</div>
+      <div class="flex-1 grid grid-cols-4 gap-2">
+        <div>洞1</div>
+        <div>洞2</div>
+        <div>洞3</div>
+        <div>洞4</div>
+      </div>
+    </div>
+
+    <!-- 遊戲主板 -->
+    <div id="gameBoard" class="flex flex-col gap-2 pb-10">
+      <!-- JavaScript 生成 -->
+    </div>
+  </div>
+
+  <!-- 自訂確認對話框 (Modal) -->
+  <div id="confirmModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div class="bg-slate-800 p-5 rounded-lg shadow-xl max-w-xs w-full border border-slate-600">
+      <h3 class="text-lg font-bold text-white mb-2">⚠️ 確定重置？</h3>
+      <p class="text-slate-300 mb-5 text-sm">即將開始新一局，確定要清空全隊所有紀錄嗎？</p>
+      <div class="flex justify-end gap-3">
+        <button id="cancelResetBtn" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm transition">取消</button>
+        <button id="confirmResetBtn" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-white text-sm font-bold transition">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, onValue, set, update, off } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    // Firebase 設定
+    const firebaseConfig = {
+      apiKey: "AIzaSyAstInPciym9zzKiSiT6pn7WQG_V7EgWXs",
+      authDomain: "artale-rjtool.firebaseapp.com",
+      databaseURL: "https://artale-rjtool-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "artale-rjtool",
+      storageBucket: "artale-rjtool.firebasestorage.app",
+      messagingSenderId: "1002921311812",
+      appId: "1:1002921311812:web:58f088e85cf3296c71c611"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    
+    // 全域狀態
+    let currentRoom = null;
+    let currentDbPath = null;
+    let unsubscribe = null; 
+    let currentBoardState = {};
+    window.currentPlayer = 'A'; 
+    const players = ['A', 'B', 'C', 'D'];
+
+    // ==================== 隱私設定：設定您的專屬密碼 ====================
+    const GUILD_PASSWORD = "9763"; // <-- 請在這裡修改您的通關密碼
+
+    // UI 元素取得
+    const authView = document.getElementById('authView');
+    const authInput = document.getElementById('authInput');
+    const verifyAuthBtn = document.getElementById('verifyAuthBtn');
+    const authErrorMsg = document.getElementById('authErrorMsg');
+
+    const lobbyView = document.getElementById('lobbyView');
+    const gameView = document.getElementById('gameView');
+    const roomInput = document.getElementById('roomInput');
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+    const currentRoomDisplay = document.getElementById('currentRoomDisplay');
+    const gameBoard = document.getElementById('gameBoard');
+    
+    // Modal 元素
+    const resetBtn = document.getElementById('resetBtn');
+    const confirmModal = document.getElementById('confirmModal');
+    const cancelResetBtn = document.getElementById('cancelResetBtn');
+    const confirmResetBtn = document.getElementById('confirmResetBtn');
+
+    // 樣式設定
+    const playerStyles = {
+      'A': { bg: 'bg-blue-600', text: 'text-white', border: 'border-blue-500', xText: 'text-blue-400' },
+      'B': { bg: 'bg-amber-500', text: 'text-white', border: 'border-amber-500', xText: 'text-amber-400' },
+      'C': { bg: 'bg-emerald-600', text: 'text-white', border: 'border-emerald-500', xText: 'text-emerald-400' },
+      'D': { bg: 'bg-purple-600', text: 'text-white', border: 'border-purple-500', xText: 'text-purple-400' }
+    };
+
+    // ==================== 通關密碼邏輯 ====================
+    verifyAuthBtn.addEventListener('click', () => {
+      if (authInput.value === GUILD_PASSWORD) {
+        authView.classList.add('hidden');
+        lobbyView.classList.remove('hidden');
+        // 記憶登入狀態，重新整理網頁不用重輸密碼 (存在 sessionStorage 中，關閉分頁才失效)
+        sessionStorage.setItem('isVerified', 'true');
+      } else {
+        authErrorMsg.classList.remove('hidden');
+        authInput.value = '';
+      }
+    });
+
+    authInput.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') verifyAuthBtn.click();
+    });
+
+    // 檢查是否已經驗證過
+    if (sessionStorage.getItem('isVerified') === 'true') {
+      authView.classList.add('hidden');
+      lobbyView.classList.remove('hidden');
+    }
+
+    // ==================== 核心遊戲邏輯 ====================
+    window.setRole = function(role) {
+      window.currentPlayer = role;
+      players.forEach(p => {
+        const btn = document.getElementById(`role-${p}`);
+        if (p === role) {
+          btn.classList.remove('inactive');
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+          btn.classList.add('inactive');
+        }
+      });
+    }
+
+    function initBoard() {
+      gameBoard.innerHTML = '';
+      for (let floor = 10; floor >= 1; floor--) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center text-center bg-slate-800/40 p-1.5 rounded';
+        
+        const floorLabel = document.createElement('div');
+        floorLabel.className = 'w-12 font-bold text-slate-300';
+        floorLabel.innerText = `${floor}F`;
+        row.appendChild(floorLabel);
+
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'flex-1 grid grid-cols-4 gap-2';
+
+        for (let hole = 1; hole <= 4; hole++) {
+          const btn = document.createElement('button');
+          btn.id = `f${floor}-h${hole}`;
+          btn.className = `h-11 rounded shadow transition-all duration-150 text-sm font-bold flex items-center justify-center bg-slate-700 text-slate-500`;
+          btn.innerText = "?";
+          
+          btn.addEventListener('click', () => handleBtnClick(floor, hole));
+          btnContainer.appendChild(btn);
+        }
+        
+        row.appendChild(btnContainer);
+        gameBoard.appendChild(row);
+      }
+    }
+
+    function handleBtnClick(floor, hole) {
+      if (!currentDbPath) return;
+      
+      const key = `f${floor}-h${hole}`;
+      const currentState = currentBoardState[key] || '0';
+      const role = window.currentPlayer;
+      let nextState = '0';
+
+      if (currentState === '0') {
+        nextState = `${role}_O`;
+      } else if (currentState === `${role}_O`) {
+        nextState = `${role}_X`;
+      } else if (currentState === `${role}_X`) {
+        nextState = '0';
+      } else {
+        nextState = `${role}_O`;
+      }
+
+      const updates = {};
+      updates[key] = nextState;
+      update(ref(db, currentDbPath), updates);
+    }
+
+    function updateDashboardAndBoard(data) {
+      const pathData = { A: [], B: [], C: [], D: [] };
+      const floorStatus = {};
+
+      for (let floor = 1; floor <= 10; floor++) {
+        floorStatus[floor] = { confirmedPlayers: {}, occupiedHoles: [] };
+        for (let hole = 1; hole <= 4; hole++) {
+          const state = data[`f${floor}-h${hole}`];
+          if (state && state.includes('_O')) {
+            const player = state.split('_')[0];
+            floorStatus[floor].confirmedPlayers[player] = hole;
+            floorStatus[floor].occupiedHoles.push(hole);
+            pathData[player][floor] = { hole: hole, inferred: false };
+          }
+        }
+
+        const confirmedCount = Object.keys(floorStatus[floor].confirmedPlayers).length;
+        if (confirmedCount === 3) {
+          const missingPlayer = players.find(p => !floorStatus[floor].confirmedPlayers[p]);
+          const missingHole = [1, 2, 3, 4].find(h => !floorStatus[floor].occupiedHoles.includes(h));
+          
+          if (missingPlayer && missingHole) {
+            pathData[missingPlayer][floor] = { hole: missingHole, inferred: true };
+          }
+        }
+      }
+
+      players.forEach(player => {
+        const pathSpanContainer = document.querySelector(`#path-${player} span`);
+        pathSpanContainer.innerHTML = ''; 
+
+        for (let floor = 1; floor <= 10; floor++) {
+          const span = document.createElement('span');
+          const floorData = pathData[player][floor];
+
+          if (floorData) {
+            span.innerText = floorData.hole;
+            if (floorData.inferred) {
+              span.className = 'inferred-path';
+            }
+          } else {
+            span.innerText = '?';
+            span.className = 'text-slate-600'; 
+          }
+          pathSpanContainer.appendChild(span);
+        }
+      });
+
+      for (let floor = 1; floor <= 10; floor++) {
+        for (let hole = 1; hole <= 4; hole++) {
+          const key = `f${floor}-h${hole}`;
+          const state = data[key] || '0';
+          const btn = document.getElementById(key);
+          if (!btn) continue;
+
+          let inferredOwner = null;
+          players.forEach(p => {
+            if (pathData[p][floor] && pathData[p][floor].inferred && pathData[p][floor].hole === hole) {
+              inferredOwner = p;
+            }
+          });
+
+          btn.className = 'h-11 rounded shadow transition-all duration-150 text-sm font-bold flex items-center justify-center';
+
+          if (inferredOwner) {
+            const styles = playerStyles[inferredOwner];
+            btn.classList.add('bg-slate-800', 'border-2', 'border-dashed', styles.border, styles.xText, 'italic');
+            btn.innerText = `${inferredOwner} (?)`;
+          } else if (state === '0') {
+            btn.classList.add('bg-slate-700', 'text-slate-500');
+            btn.innerText = '?';
+          } else {
+            const [player, result] = state.split('_');
+            const styles = playerStyles[player];
+
+            if (result === 'O') {
+              btn.classList.add(styles.bg, styles.text);
+              btn.innerText = `${player} (O)`;
+            } else if (result === 'X') {
+              btn.classList.add('bg-slate-900', 'border-2', styles.border, styles.xText);
+              btn.innerText = `${player} (X)`;
+            }
+          }
+        }
+      }
+    }
+
+    // ==================== 房間系統邏輯 ====================
+    joinRoomBtn.addEventListener('click', () => {
+      const roomStr = roomInput.value.trim();
+      if (!roomStr) {
+        alert("請輸入房間號碼！");
+        return;
+      }
+
+      currentRoom = roomStr;
+      currentRoomDisplay.innerText = currentRoom;
+      
+      currentDbPath = `rooms/${currentRoom}/board`;
+
+      lobbyView.classList.add('hidden');
+      gameView.classList.remove('hidden');
+
+      initBoard();
+      
+      const roomRef = ref(db, currentDbPath);
+      unsubscribe = onValue(roomRef, (snapshot) => {
+        const data = snapshot.val() || {};
+        currentBoardState = data;
+        updateDashboardAndBoard(data);
+      });
+    });
+
+    roomInput.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') joinRoomBtn.click();
+    });
+
+    leaveRoomBtn.addEventListener('click', () => {
+      if (unsubscribe) {
+        const roomRef = ref(db, currentDbPath);
+        off(roomRef, 'value', unsubscribe);
+        unsubscribe = null;
+      }
+      
+      currentRoom = null;
+      currentDbPath = null;
+      currentBoardState = {};
+      roomInput.value = '';
+
+      gameView.classList.add('hidden');
+      lobbyView.classList.remove('hidden');
+    });
+
+    resetBtn.addEventListener('click', () => {
+      confirmModal.classList.remove('hidden');
+    });
+
+    cancelResetBtn.addEventListener('click', () => {
+      confirmModal.classList.add('hidden');
+    });
+
+    confirmResetBtn.addEventListener('click', () => {
+      if (currentDbPath) {
+        set(ref(db, currentDbPath), null);
+      }
+      confirmModal.classList.add('hidden');
+    });
+
+  </script>
+</body>
+</html>
+
+
